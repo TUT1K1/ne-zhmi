@@ -1,1 +1,177 @@
+<!DOCTYPE html>
 
+<html lang="ru">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+
+<meta name="theme-color" content="#101014">
+
+<title>НЕ ЖМИ</title>
+
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+<style>
+
+:root{color-scheme:dark;--bg:#101014;--orange:#ff7a1a;--green:#42e6a4;--red:#ff4f70}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+
+body{margin:0;min-height:100dvh;background:radial-gradient(ellipse at top,#30202a,var(--bg) 65%);color:#fff;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;display:grid;place-items:center;padding:18px}
+
+.app{width:min(100%,430px);text-align:center}
+
+h1{font-size:clamp(44px,13vw,62px);font-weight:1000;letter-spacing:-3px;margin:8px 0}
+
+h1 span{color:var(--orange)}
+
+.sub{color:#aaa9b8;margin-bottom:22px;font-size:14px}
+
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:14px}
+
+.stat{background:#ffffff09;border:1px solid #ffffff15;border-radius:16px;padding:12px 4px}
+
+.stat b{display:block;font-size:23px}.stat small{font-size:10px;color:#aaa9b8;letter-spacing:1px}
+
+.arena{height:330px;position:relative;overflow:hidden;border:1px solid #ffffff18;border-radius:24px;background:#ffffff05;display:flex;justify-content:center;align-items:center}
+
+#prompt{position:absolute;top:23px;left:10px;right:10px;font-size:22px;font-weight:950;letter-spacing:1px}
+
+#hint{position:absolute;top:57px;left:15px;right:15px;color:#aaa9b8;font-size:12px}
+
+#target{position:absolute;left:50%;top:58%;transform:translate(-50%,-50%);width:142px;height:142px;border:0;border-radius:50%;background:var(--orange);color:#211309;font-size:19px;font-weight:950;box-shadow:0 0 0 10px #ff7a1a20,0 0 38px #ff7a1a50;touch-action:manipulation}
+
+#target.wait{background:#30303b;color:#fff;box-shadow:0 0 0 10px #ffffff08}
+
+#target:active{filter:brightness(1.15)}
+
+.overlay{position:absolute;inset:0;background:#101014ed;z-index:2;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:24px}
+
+.overlay h2{font-size:30px;line-height:1.1;margin:0 0 12px}
+
+.overlay p{color:#b0afbd;font-size:14px;line-height:1.5;margin:0 0 22px}
+
+.primary,.secondary{border-radius:14px;padding:15px;font-size:14px;font-weight:850}
+
+.primary{width:100%;max-width:270px;border:0;background:var(--orange);color:#211309}
+
+.bottom{display:flex;gap:9px;margin-top:13px}
+
+.secondary{flex:1;border:1px solid #ffffff1c;background:#ffffff08;color:#fff}
+
+.note{font-size:11px;color:#9998a6;line-height:1.5;margin:13px 5px}
+
+.hidden{display:none!important}
+
+#toast{position:absolute;bottom:14px;left:8px;right:8px;color:#aaa9b8;font-size:12px;pointer-events:none}
+
+@media(max-height:700px){.arena{height:270px}h1{font-size:43px}.sub{margin-bottom:12px}}
+
+</style>
+
+</head>
+
+<body>
+
+<main class="app">
+
+<h1>НЕ <span>ЖМИ</span></h1>
+
+<div class="sub">Твоя реакция против твоего любопытства.</div>
+
+<div class="stats">
+
+<div class="stat"><b id="score">0</b><small>ОЧКИ</small></div>
+
+<div class="stat"><b id="lives">❤️❤️❤️</b><small>ПОПЫТКИ</small></div>
+
+<div class="stat"><b id="best">0</b><small>РЕКОРД</small></div>
+
+</div>
+
+<section class="arena" id="arena">
+
+<div id="prompt">ГОТОВ?</div>
+
+<div id="hint">Нажимай только по команде.</div>
+
+<button id="target" class="wait" disabled>НЕ ЖМИ</button>
+
+<div class="overlay" id="overlay">
+
+<h2 id="overTitle">Сможешь<br>не нажать?</h2>
+
+<p id="overText">Иногда надо нажать. Иногда нельзя. У тебя три попытки — не доверяй кнопке.</p>
+
+<button class="primary" id="start">НАЧАТЬ ИГРУ</button>
+
+</div>
+
+<div id="toast"></div>
+
+</section>
+
+<div class="bottom">
+
+<button class="secondary" id="sound">🔇 Звук: выкл.</button>
+
+<button class="secondary" id="reset">Сбросить рекорд</button>
+
+</div>
+
+<div class="note">Рекорд хранится в этом браузере. Играй быстро, но думай прежде чем нажать.</div>
+
+</main>
+
+<script>
+
+(()=>{
+
+const $=id=>document.getElementById(id);
+
+const tg=window.Telegram?.WebApp;
+
+try{tg?.ready();tg?.expand()}catch(e){}
+
+let score=0,lives=3,best=Number(localStorage.getItem('nezhmi_best')||0);
+
+let active=false,resolved=true,needPress=false,timer=null,sound=false,audio=null;
+
+$('best').textContent=best;
+
+function beep(f=550){if(!sound)return;try{audio=audio||new(window.AudioContext||window.webkitAudioContext)();let o=audio.createOscillator(),g=audio.createGain();o.frequency.value=f;g.gain.value=.04;o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+.08)}catch(e){}}
+
+function stats(){if(score>best){best=score;localStorage.setItem('nezhmi_best',best)}$('score').textContent=score;$('lives').textContent='❤️'.repeat(lives)+'🖤'.repeat(3-lives);$('best').textContent=best}
+
+function toast(t){$('toast').textContent=t;setTimeout(()=>{if($('toast').textContent===t)$('toast').textContent=''},900)}
+
+function move(){let a=$('arena'),x=78+Math.random()*Math.max(1,a.clientWidth-156),y=112+Math.random()*Math.max(1,a.clientHeight-185);$('target').style.left=x+'px';$('target').style.top=y+'px'}
+
+function finish(){active=false;clearTimeout(timer);$('target').disabled=true;$('overlay').classList.remove('hidden');$('overTitle').innerHTML=(score>best?'НОВЫЙ РЕКОРД!':'ИГРА ОКОНЧЕНА')+'<br><span style="color:var(--orange)">'+score+' очков</span>';$('overText').textContent='Рекорд: '+best+'. Готов доказать, что можешь лучше?';$('start').textContent='ЕЩЁ РАЗ';stats()}
+
+function lose(text){if(!active||resolved)return;resolved=true;lives--;beep(170);stats();toast(text);if(lives<=0){finish();return}next(650)}
+
+function win(){if(!active||resolved)return;resolved=true;clearTimeout(timer);score++;stats();beep(760);toast(['Отлично!','Кнопка обманута!','Реакция есть!','Ещё очко!'][Math.floor(Math.random()*4)]);next(430)}
+
+function next(delay=500){clearTimeout(timer);if(!active)return;timer=setTimeout(()=>{if(!active)return;resolved=false;needPress=Math.random()<.56;$('prompt').textContent=needPress?'ЖМИ!':'НЕ ЖМИ!';$('prompt').style.color=needPress?'var(--green)':'var(--red)';$('hint').textContent=needPress?'Нажми до конца отсчёта!':'Не трогай кнопку, дождись смены команды.';$('target').textContent=needPress?'ЖМИ!':'НЕ ЖМИ';$('target').classList.toggle('wait',!needPress);$('target').disabled=false;move();timer=setTimeout(()=>{if(!active||resolved)return;if(needPress)lose('Не успел!');else win()},needPress?1900:1350)},delay)}
+
+function start(){score=0;lives=3;active=true;resolved=true;stats();$('overlay').classList.add('hidden');$('target').disabled=false;next(250)}
+
+$('start').addEventListener('click',start);
+
+$('target').addEventListener('click',()=>{if(!active||resolved)return;if(needPress)win();else lose('Попался! Нужно было не нажимать.')});
+
+$('sound').addEventListener('click',()=>{sound=!sound;$('sound').textContent=sound?'🔊 Звук: вкл.':'🔇 Звук: выкл.';beep()});
+
+$('reset').addEventListener('click',()=>{if(confirm('Сбросить рекорд на этом устройстве?')){best=0;localStorage.removeItem('nezhmi_best');stats();toast('Рекорд сброшен')}});
+
+})();
+
+</script>
+
+</body>
+
+</html>
